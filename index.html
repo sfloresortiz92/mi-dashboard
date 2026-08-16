@@ -1,0 +1,1040 @@
+<!DOCTYPE html>
+<html lang="es" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Control Operativo & Status OTM</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Leaflet CSS & JS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <!-- SheetJS (xlsx) -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <!-- html2canvas for image export -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        darkBg: '#0b0f19',
+                        cardBg: '#111827',
+                        borderCol: '#1f2937'
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-[#0b0f19] text-slate-100 font-sans antialiased min-h-screen flex flex-col">
+
+    <header class="bg-[#111827] border-b border-slate-800 px-4 py-3 sticky top-0 z-50 shadow-md">
+        <div class="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
+            <div class="flex items-center space-x-3">
+                <div class="bg-blue-600/20 p-2.5 rounded-xl border border-blue-500/30 text-blue-400">
+                    <i class="fa-solid fa-tower-broadcast text-xl"></i>
+                </div>
+                <div>
+                    <h1 class="text-lg font-bold tracking-tight text-white flex items-center gap-2">
+                        TORRE DE CONTROL OTM 
+                        <span class="text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">ONLINE</span>
+                    </h1>
+                    <p class="text-xs text-slate-400">Sistema Integral de Monitoreo y Estado de Unidades de Transporte</p>
+                </div>
+            </div>
+
+            <!-- Real-time Clock & Action Buttons -->
+            <div class="flex flex-wrap items-center gap-3">
+                <div class="bg-slate-900/80 border border-slate-800 px-3 py-1.5 rounded-xl text-center flex items-center space-x-2">
+                    <i class="fa-regular fa-clock text-blue-400"></i>
+                    <div>
+                        <div id="liveClock" class="text-xs font-mono font-bold text-white">--:--:--</div>
+                        <div id="liveDate" class="text-[10px] text-slate-400">---, -- --- ----</div>
+                    </div>
+                </div>
+
+                <div class="flex items-center space-x-2">
+                    <label class="cursor-pointer bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-xl text-xs font-semibold shadow-md transition flex items-center gap-1.5">
+                        <i class="fa-solid fa-file-excel"></i> Cargar Excel
+                        <input type="file" id="excelUpload" accept=".xlsx, .xls" class="hidden" onchange="handleExcelUpload(event)">
+                    </label>
+
+                    <button onclick="downloadTemplate()" class="bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-2 rounded-xl text-xs font-semibold border border-slate-700 transition flex items-center gap-1.5" title="Descargar Plantilla">
+                        <i class="fa-solid fa-download"></i> Plantilla
+                    </button>
+
+                    <button onclick="exportToExcel()" class="bg-emerald-600/80 hover:bg-emerald-600 text-white px-3 py-2 rounded-xl text-xs font-semibold transition flex items-center gap-1.5">
+                        <i class="fa-solid fa-file-arrow-down"></i> Exportar
+                    </button>
+
+                    <button onclick="exportToHDImage()" class="bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-2 rounded-xl text-xs font-semibold border border-slate-700 transition flex items-center gap-1" title="Exportar HD">
+                        <i class="fa-solid fa-camera"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main id="dashboard-container" class="max-w-7xl mx-auto w-full p-4 flex-1 space-y-4">
+        
+        <!-- KPI Summary Cards -->
+        <div class="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+            <div class="bg-slate-900/90 border border-slate-800/80 p-3.5 rounded-2xl shadow-lg relative overflow-hidden">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-xs font-medium text-slate-400">Total Unidades</p>
+                        <h3 id="kpiTotal" class="text-2xl font-bold text-white mt-1">0</h3>
+                    </div>
+                    <div class="p-2.5 bg-blue-500/10 rounded-xl text-blue-400 border border-blue-500/20">
+                        <i class="fa-solid fa-truck-ramp-box text-lg"></i>
+                    </div>
+                </div>
+                <div class="mt-2 text-[10px] text-slate-400 flex items-center gap-1">
+                    <span class="text-blue-400 font-bold"><i class="fa-solid fa-arrow-up"></i> 100%</span> activo en torre
+                </div>
+            </div>
+
+            <div class="bg-slate-900/90 border border-slate-800/80 p-3.5 rounded-2xl shadow-lg relative overflow-hidden">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-xs font-medium text-slate-400">En Rampa</p>
+                        <h3 id="kpiRampa" class="text-2xl font-bold text-emerald-400 mt-1">0</h3>
+                    </div>
+                    <div class="p-2.5 bg-emerald-500/10 rounded-xl text-emerald-400 border border-emerald-500/20">
+                        <i class="fa-solid fa-warehouse text-lg"></i>
+                    </div>
+                </div>
+                <div class="mt-2 text-[10px] text-slate-400 flex items-center gap-1">
+                    <span id="kpiRampaPct" class="text-emerald-400 font-bold">0%</span> del total
+                </div>
+            </div>
+
+            <div class="bg-slate-900/90 border border-slate-800/80 p-3.5 rounded-2xl shadow-lg relative overflow-hidden">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-xs font-medium text-slate-400">Cargando</p>
+                        <h3 id="kpiCargando" class="text-2xl font-bold text-amber-400 mt-1">0</h3>
+                    </div>
+                    <div class="p-2.5 bg-amber-500/10 rounded-xl text-amber-400 border border-amber-500/20">
+                        <i class="fa-solid fa-boxes-stacked text-lg"></i>
+                    </div>
+                </div>
+                <div class="mt-2 text-[10px] text-slate-400 flex items-center gap-1">
+                    <span id="kpiCargandoPct" class="text-amber-400 font-bold">0%</span> del total
+                </div>
+            </div>
+
+            <div class="bg-slate-900/90 border border-slate-800/80 p-3.5 rounded-2xl shadow-lg relative overflow-hidden">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-xs font-medium text-slate-400">Por Guiar</p>
+                        <h3 id="kpiPorGuiar" class="text-2xl font-bold text-purple-400 mt-1">0</h3>
+                    </div>
+                    <div class="p-2.5 bg-purple-500/10 rounded-xl text-purple-400 border border-purple-500/20">
+                        <i class="fa-solid fa-file-pen text-lg"></i>
+                    </div>
+                </div>
+                <div class="mt-2 text-[10px] text-slate-400 flex items-center gap-1">
+                    <span id="kpiPorGuiarPct" class="text-purple-400 font-bold">0%</span> del total
+                </div>
+            </div>
+
+            <div class="bg-slate-900/90 border border-slate-800/80 p-3.5 rounded-2xl shadow-lg relative overflow-hidden col-span-2 sm:col-span-1">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-xs font-medium text-slate-400">Planeado</p>
+                        <h3 id="kpiPlaneado" class="text-2xl font-bold text-indigo-400 mt-1">0</h3>
+                    </div>
+                    <div class="p-2.5 bg-indigo-500/10 rounded-xl text-indigo-400 border border-indigo-500/20">
+                        <i class="fa-solid fa-clock-rotate-left text-lg"></i>
+                    </div>
+                </div>
+                <div class="mt-2 text-[10px] text-slate-400 flex items-center gap-1">
+                    <span id="kpiPlaneadoPct" class="text-indigo-400 font-bold">0%</span> del total
+                </div>
+            </div>
+        </div>
+
+        <!-- Detalle Operativo OTM Table First -->
+        <div class="bg-slate-900/90 border border-slate-800/80 rounded-2xl shadow-lg overflow-hidden flex flex-col">
+            <!-- Table Header / Controls Toolbar -->
+            <div class="p-3.5 border-b border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3 bg-slate-900/50">
+                <div class="flex items-center space-x-2 w-full sm:w-auto">
+                    <h2 class="text-sm font-bold text-white flex items-center gap-2 whitespace-nowrap">
+                        <i class="fa-solid fa-table-list text-blue-400"></i> Detalle Operativo OTM <span id="tableRecordCount" class="text-xs text-slate-400 font-normal">(0)</span>
+                    </h2>
+                </div>
+
+                <!-- Filters & Search Toolbar -->
+                <div class="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-end">
+                    <div class="relative flex-1 sm:flex-initial">
+                        <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-xs text-slate-400"></i>
+                        <input type="text" id="searchInput" placeholder="Buscar rampa, destino, placa..." oninput="applyFilters()" class="w-full sm:w-52 bg-slate-800/80 border border-slate-700/80 rounded-xl pl-8 pr-3 py-1.5 text-xs text-white placeholder-slate-400 focus:outline-none focus:border-blue-500">
+                    </div>
+
+                    <select id="statusFilter" onchange="applyFilters()" class="bg-slate-800/80 border border-slate-700/80 rounded-xl px-3 py-1.5 text-xs text-slate-300 focus:outline-none focus:border-blue-500">
+                        <option value="">Todos los Estados</option>
+                        <option value="RAMPA">RAMPA</option>
+                        <option value="CARGANDO">CARGANDO</option>
+                        <option value="POR_GUIAR">POR_GUIAR</option>
+                        <option value="PLANEADO">PLANEADO</option>
+                    </select>
+
+                    <select id="zoneFilter" onchange="applyFilters()" class="bg-slate-800/80 border border-slate-700/80 rounded-xl px-3 py-1.5 text-xs text-slate-300 focus:outline-none focus:border-blue-500">
+                        <option value="">Todas las Zonas</option>
+                        <option value="CD">Centros de Distribución (CD)</option>
+                        <option value="PROVINCIA">Provincias / Tiendas</option>
+                    </select>
+
+                    <button onclick="resetFilters()" class="bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-1.5 rounded-xl text-xs font-semibold border border-slate-700 transition" title="Limpiar filtros">
+                        <i class="fa-solid fa-rotate-right"></i>
+                    </button>
+
+                    <button onclick="openAddModal()" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-xl text-xs font-semibold transition flex items-center gap-1 shadow-md">
+                        <i class="fa-solid fa-plus"></i> Nueva UT
+                    </button>
+                </div>
+            </div>
+
+            <!-- Table Container -->
+            <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse text-xs">
+                    <thead>
+                        <tr class="bg-slate-950/60 text-slate-400 border-b border-slate-800 uppercase font-semibold text-[10px] tracking-wider">
+                            <th class="py-2.5 px-3 cursor-pointer hover:text-white" onclick="sortTable('Rampa')">Rampa <i class="fa-solid fa-sort ml-1"></i></th>
+                            <th class="py-2.5 px-3 cursor-pointer hover:text-white" onclick="sortTable('Cod')">Cod <i class="fa-solid fa-sort ml-1"></i></th>
+                            <th class="py-2.5 px-3 cursor-pointer hover:text-white" onclick="sortTable('Destino')">Destino <i class="fa-solid fa-sort ml-1"></i></th>
+                            <th class="py-2.5 px-3 cursor-pointer hover:text-white" onclick="sortTable('PLACA2')">Placa <i class="fa-solid fa-sort ml-1"></i></th>
+                            <th class="py-2.5 px-3 text-center cursor-pointer hover:text-white" onclick="sortTable('Transportista')">Transportista <i class="fa-solid fa-sort ml-1"></i></th>
+                            <th class="py-2.5 px-3 text-center cursor-pointer hover:text-white" onclick="sortTable('Estado_UT')">Estado UT <i class="fa-solid fa-sort ml-1"></i></th>
+                            <th class="py-2.5 px-3 text-center cursor-pointer hover:text-white" onclick="sortTable('Tipo_UT')">Tipo de UT <i class="fa-solid fa-sort ml-1"></i></th>
+                            <th class="py-2.5 px-3 text-center cursor-pointer hover:text-white" onclick="sortHoraRampa()">Hora Rampa <i class="fa-solid fa-sort ml-1"></i></th>
+                            <th class="py-2.5 px-3 text-center cursor-pointer hover:text-white" onclick="sortTable('Llegada_Rampa')">Llegada a Rampa <i class="fa-solid fa-sort ml-1"></i></th>
+                            <th class="py-2.5 px-3 text-center">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tableBody" class="divide-y divide-slate-800/60">
+                        <!-- Dynamic rows injected here -->
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Pagination Footer -->
+            <div class="p-3 bg-slate-950/40 border-t border-slate-800 flex items-center justify-between text-xs text-slate-400">
+                <span id="paginationInfo">Mostrando 0 de 0 unidades</span>
+                <div class="flex items-center space-x-1">
+                    <span class="px-2 py-1 bg-slate-800 rounded text-slate-300 font-bold">1</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Donut Chart & Geographic Map View Below Table -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            <!-- Status Distribution Donut Chart -->
+            <div class="bg-slate-900/90 border border-slate-800/80 p-4 rounded-2xl shadow-lg flex flex-col justify-between">
+                <div class="flex items-center justify-between mb-3">
+                    <h2 class="text-sm font-bold text-white flex items-center gap-2">
+                        <i class="fa-solid fa-chart-pie text-blue-400"></i> Estado Operativo UT
+                    </h2>
+                    <span id="chartTotalBadge" class="text-[10px] bg-slate-800 text-slate-300 px-2 py-0.5 rounded-md font-mono">0 UNIDADES</span>
+                </div>
+                
+                <div class="relative h-56 flex items-center justify-center my-2">
+                    <canvas id="statusDonutChart"></canvas>
+                    <div class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                        <span id="donutCenterCount" class="text-2xl font-black text-white">0</span>
+                        <span class="text-[10px] text-slate-400 uppercase tracking-widest font-semibold">Total</span>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-2 mt-2 pt-2 border-t border-slate-800/60 text-xs">
+                    <div class="flex items-center justify-between px-2 py-1 bg-slate-800/40 rounded-lg">
+                        <span class="flex items-center gap-1.5 text-slate-300"><span class="w-2.5 h-2.5 rounded-full bg-emerald-400"></span> Rampa</span>
+                        <span id="legendCountRampa" class="font-bold text-white">0</span>
+                    </div>
+                    <div class="flex items-center justify-between px-2 py-1 bg-slate-800/40 rounded-lg">
+                        <span class="flex items-center gap-1.5 text-slate-300"><span class="w-2.5 h-2.5 rounded-full bg-amber-400"></span> Cargando</span>
+                        <span id="legendCountCargando" class="font-bold text-white">0</span>
+                    </div>
+                    <div class="flex items-center justify-between px-2 py-1 bg-slate-800/40 rounded-lg">
+                        <span class="flex items-center gap-1.5 text-slate-300"><span class="w-2.5 h-2.5 rounded-full bg-purple-400"></span> Por Guiar</span>
+                        <span id="legendCountPorGuiar" class="font-bold text-white">0</span>
+                    </div>
+                    <div class="flex items-center justify-between px-2 py-1 bg-slate-800/40 rounded-lg">
+                        <span class="flex items-center gap-1.5 text-slate-300"><span class="w-2.5 h-2.5 rounded-full bg-indigo-400"></span> Planeado</span>
+                        <span id="legendCountPlaneado" class="font-bold text-white">0</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Geographic Map View -->
+            <div class="bg-slate-900/90 border border-slate-800/80 p-4 rounded-2xl shadow-lg lg:col-span-2 flex flex-col">
+                <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
+                    <h2 class="text-sm font-bold text-white flex items-center gap-2">
+                        <i class="fa-solid fa-map-location-dot text-blue-400"></i> Mapa Logístico de Destinos
+                    </h2>
+                    <div class="flex items-center gap-3">
+                        <span class="text-sm font-bold bg-blue-500/20 text-blue-400 border border-blue-500/30 px-3.5 py-1.5 rounded-xl shadow">CDs Regionales: <span id="badgeCDCount" class="text-base font-black">0</span></span>
+                        <span class="text-sm font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-3.5 py-1.5 rounded-xl shadow">Zona Provincia: <span id="badgeProvCount" class="text-base font-black">0</span></span>
+                    </div>
+                </div>
+                <div id="map" class="w-full flex-1 min-h-[220px] rounded-xl border border-slate-800 z-10"></div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Modal Form for Add / Edit Unit -->
+    <div id="unitModal" class="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm hidden flex items-center justify-center p-4">
+        <div class="bg-slate-900 border border-slate-800 w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden">
+            <div class="px-4 py-3 bg-slate-800/80 border-b border-slate-700 flex items-center justify-between">
+                <h3 id="modalTitle" class="text-sm font-bold text-white flex items-center gap-2">
+                    <i class="fa-solid fa-truck-front text-blue-400"></i> Registrar Nueva Unidad
+                </h3>
+                <button onclick="closeUnitModal()" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-base"></i></button>
+            </div>
+            <form id="unitForm" onsubmit="saveUnit(event)" class="p-4 space-y-3">
+                <input type="hidden" id="formIndex" value="-1">
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-[11px] font-semibold text-slate-300 mb-1">Rampa</label>
+                        <input type="text" id="formRampa" required class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-blue-500" placeholder="Ej. 111">
+                    </div>
+                    <div>
+                        <label class="block text-[11px] font-semibold text-slate-300 mb-1">Código (Cod)</label>
+                        <input type="number" id="formCod" required class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-blue-500" placeholder="Ej. 946">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-[11px] font-semibold text-slate-300 mb-1">Destino</label>
+                        <input type="text" id="formDestino" required class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-white uppercase focus:outline-none focus:border-blue-500" placeholder="Ej. SPSA CD PIURA">
+                    </div>
+                    <div>
+                        <label class="block text-[11px] font-semibold text-slate-300 mb-1">Placa (PLACA2)</label>
+                        <input type="text" id="formPlaca" required class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-white uppercase focus:outline-none focus:border-blue-500" placeholder="Ej. TJO-993">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-[11px] font-semibold text-slate-300 mb-1">Transportista</label>
+                        <input type="text" id="formTransportista" required class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-white uppercase focus:outline-none focus:border-blue-500" placeholder="Ej. TVN">
+                    </div>
+                    <div>
+                        <label class="block text-[11px] font-semibold text-slate-300 mb-1">Estado UT</label>
+                        <select id="formEstado" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-blue-500">
+                            <option value="RAMPA">RAMPA</option>
+                            <option value="CARGANDO">CARGANDO</option>
+                            <option value="POR_GUIAR">POR_GUIAR</option>
+                            <option value="PLANEADO">PLANEADO</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-[11px] font-semibold text-slate-300 mb-1">Tipo de UT</label>
+                        <input type="text" id="formTipo" required class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-white uppercase focus:outline-none focus:border-blue-500" placeholder="Ej. PALETERO_46-52P">
+                    </div>
+                    <div>
+                        <label class="block text-[11px] font-semibold text-slate-300 mb-1">Hora en Rampa</label>
+                        <input type="text" id="formHoraRampa" required class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-white font-mono focus:outline-none focus:border-blue-500" placeholder="Ej. 02:24:00">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-[11px] font-semibold text-slate-300 mb-1">Llegada a Rampa (Fecha y Hora)</label>
+                    <input type="text" id="formLlegada" required class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-white font-mono focus:outline-none focus:border-blue-500" placeholder="Ej. 12/08/2026 11:25">
+                </div>
+
+                <div class="flex items-center justify-end space-x-2 pt-2 border-t border-slate-800">
+                    <button type="button" onclick="closeUnitModal()" class="bg-slate-800 hover:bg-slate-700 text-slate-300 px-4 py-2 rounded-xl text-xs font-semibold transition">Cancelar</button>
+                    <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl text-xs font-semibold shadow-md transition">Guardar Unidad</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        // Data Store precisely updated to match the reference Excel sheet order and values
+        let initialData = [
+            { Rampa: '111', Cod: 946, Destino: 'SPSA CD PIURA', PLACA2: 'TJO-993', Transportista: 'TVN', Estado_UT: 'RAMPA', Tipo_UT: 'PALETERO_46-52P', Hora_Rampa: '02:24:00', Llegada_Rampa: '12/08/2026 11:25' },
+            { Rampa: '113', Cod: 961, Destino: 'CD MASS PIURA', PLACA2: 'TJH-983', Transportista: 'TVN', Estado_UT: 'CARGANDO', Tipo_UT: 'PALETERO_46-52P', Hora_Rampa: '02:33:00', Llegada_Rampa: '12/08/2026 11:16' },
+            { Rampa: '117', Cod: 965, Destino: 'SPSA CD MASS AREQUIPA', PLACA2: 'BDY-988', Transportista: 'HUAYRAZ', Estado_UT: 'POR_GUIAR', Tipo_UT: 'FURGON_24-26P', Hora_Rampa: '03:46:00', Llegada_Rampa: '12/08/2026 10:03' },
+            { Rampa: '119', Cod: 959, Destino: 'SPSA CD CHICLAYO', PLACA2: 'BVM-975', Transportista: 'ISL', Estado_UT: 'POR_GUIAR', Tipo_UT: 'PALETERO_46-52P', Hora_Rampa: '03:48:00', Llegada_Rampa: '12/08/2026 10:01' },
+            { Rampa: '121', Cod: 965, Destino: 'SPSA CD MASS AREQUIPA', PLACA2: 'BJO-975', Transportista: 'AUSTRAL', Estado_UT: 'CARGANDO', Tipo_UT: 'PALETERO_46-52P', Hora_Rampa: '01:25:00', Llegada_Rampa: '12/08/2026 12:24' },
+            { Rampa: '20-A', Cod: 4, Destino: 'PVO PLAZA VEA JAEN', PLACA2: 'BYB-987', Transportista: 'ISL', Estado_UT: 'CARGANDO', Tipo_UT: 'PALETERO_46-52P', Hora_Rampa: '02:41:00', Llegada_Rampa: '12/08/2026 11:08' },
+            { Rampa: '22-A', Cod: 130, Destino: 'SPSA PVEA CHIMBOTE', PLACA2: 'AWT-997', Transportista: 'ISL', Estado_UT: 'CARGANDO', Tipo_UT: 'PALETERO_46-52P', Hora_Rampa: '02:53:00', Llegada_Rampa: '12/08/2026 10:56' },
+            { Rampa: '24-A', Cod: 1250, Destino: 'SPSA MAKRO CHIMBOTE', PLACA2: 'BMB-975', Transportista: 'ISL', Estado_UT: 'POR_GUIAR', Tipo_UT: 'PALETERO_46-52P', Hora_Rampa: '05:46:00', Llegada_Rampa: '12/08/2026 08:03' },
+            { Rampa: '30-A', Cod: 123, Destino: 'SPSA PVEA EL CHACARERO', PLACA2: 'BVK-981', Transportista: 'ISL', Estado_UT: 'POR_GUIAR', Tipo_UT: 'PALETERO_46-52P', Hora_Rampa: '05:44:00', Llegada_Rampa: '12/08/2026 08:05' },
+            { Rampa: '36-A', Cod: 510, Destino: 'SPSA ECONOMAX CHALLAPAMPA AREQUIPA', PLACA2: 'BKA-990', Transportista: 'AUSTRAL', Estado_UT: 'CARGANDO', Tipo_UT: 'PALETERO_46-52P', Hora_Rampa: '02:57:00', Llegada_Rampa: '12/08/2026 10:52' },
+            { Rampa: '46-A', Cod: 146, Destino: 'SPSA PVEA TACNA', PLACA2: 'AZQ-971', Transportista: 'AUSTRAL', Estado_UT: 'CARGANDO', Tipo_UT: 'PALETERO_46-52P', Hora_Rampa: '03:31:00', Llegada_Rampa: '12/08/2026 10:18' },
+            { Rampa: '48-A', Cod: 516, Destino: 'SPSA PVEA COSTANERA ILO', PLACA2: 'BJJ-972', Transportista: 'ALTAMIRA', Estado_UT: 'CARGANDO', Tipo_UT: 'PALETERO_46-52P', Hora_Rampa: '16:09:00', Llegada_Rampa: '11/08/2026 21:40' },
+            { Rampa: '48-B', Cod: 522, Destino: 'SPSA MAKRO AREQUIPA', PLACA2: 'Z2X-983', Transportista: 'AUSTRAL', Estado_UT: 'POR_GUIAR', Tipo_UT: 'PALETERO_46-52P', Hora_Rampa: '16:07:00', Llegada_Rampa: '11/08/2026 21:42' },
+            { Rampa: '50-B', Cod: 449, Destino: 'SPSA ECONOMAX SAN JERONIMO CUSCO', PLACA2: 'BPQ-988', Transportista: 'AUSTRAL', Estado_UT: 'POR_GUIAR', Tipo_UT: 'PALETERO_46-52P', Hora_Rampa: '15:14:00', Llegada_Rampa: '11/08/2026 22:35' }
+        ];
+
+        let otmData = [...initialData];
+        let filteredData = [...otmData];
+        let statusChart = null;
+        let map = null;
+        let mapMarkers = [];
+        let horaRampaSortAsc = false;
+
+        function updateRealTimeClock() {
+            const now = new Date();
+            const timeString = now.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
+            const dateString = now.toLocaleDateString('es-PE', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+            
+            const clockEl = document.getElementById('liveClock');
+            const dateEl = document.getElementById('liveDate');
+            if (clockEl) clockEl.innerText = timeString;
+            if (dateEl) dateEl.innerText = dateString;
+        }
+
+        // Increment Hora_Rampa values by 1 second for live real-time ticking
+        function incrementHoraRampaValues() {
+            if (!otmData || otmData.length === 0) return;
+            otmData.forEach(item => {
+                let rawHora = String(item.Hora_Rampa || '00:00:00').trim();
+                let parts = rawHora.split(':');
+                if (parts.length >= 3) {
+                    let hrs = parseInt(parts[0]) || 0;
+                    let mins = parseInt(parts[1]) || 0;
+                    let secs = parseInt(parts[2]) || 0;
+                    
+                    secs++;
+                    if (secs >= 60) {
+                        secs = 0;
+                        mins++;
+                        if (mins >= 60) {
+                            mins = 0;
+                            hrs = (hrs + 1) % 24;
+                        }
+                    }
+                    item.Hora_Rampa = `${String(hrs).padStart(2,'0')}:${String(mins).padStart(2,'0')}:${String(secs).padStart(2,'0')}`;
+                }
+            });
+            renderTable();
+        }
+
+        function isValidUnit(item) {
+            if (!item) return false;
+            const rampaStr = String(item.Rampa || '').trim().toLowerCase();
+            const destinoStr = String(item.Destino || '').trim().toLowerCase();
+            const placaStr = String(item.PLACA2 || '').trim();
+
+            if (rampaStr.includes('total') || rampaStr.includes('general') || destinoStr.includes('total')) {
+                return false;
+            }
+            return placaStr !== '' || destinoStr !== '';
+        }
+
+        function renderDashboard() {
+            const validUnits = otmData.filter(isValidUnit);
+            const total = validUnits.length;
+            const rampaCount = validUnits.filter(i => (i.Estado_UT || '').toUpperCase() === 'RAMPA').length;
+            const cargandoCount = validUnits.filter(i => (i.Estado_UT || '').toUpperCase() === 'CARGANDO').length;
+            const porGuiarCount = validUnits.filter(i => (i.Estado_UT || '').toUpperCase() === 'POR_GUIAR').length;
+            const planeadoCount = validUnits.filter(i => (i.Estado_UT || '').toUpperCase() === 'PLANEADO').length;
+
+            document.getElementById('kpiTotal').innerText = total;
+            document.getElementById('kpiRampa').innerText = rampaCount;
+            document.getElementById('kpiRampaPct').innerText = total > 0 ? ((rampaCount / total) * 100).toFixed(1) + '%' : '0%';
+            
+            document.getElementById('kpiCargando').innerText = cargandoCount;
+            document.getElementById('kpiCargandoPct').innerText = total > 0 ? ((cargandoCount / total) * 100).toFixed(1) + '%' : '0%';
+            
+            document.getElementById('kpiPorGuiar').innerText = porGuiarCount;
+            document.getElementById('kpiPorGuiarPct').innerText = total > 0 ? ((porGuiarCount / total) * 100).toFixed(1) + '%' : '0%';
+            
+            document.getElementById('kpiPlaneado').innerText = planeadoCount;
+            document.getElementById('kpiPlaneadoPct').innerText = total > 0 ? ((planeadoCount / total) * 100).toFixed(1) + '%' : '0%';
+
+            document.getElementById('chartTotalBadge').innerText = `${total} UNIDADES`;
+            document.getElementById('donutCenterCount').innerText = total;
+            document.getElementById('legendCountRampa').innerText = rampaCount;
+            document.getElementById('legendCountCargando').innerText = cargandoCount;
+            document.getElementById('legendCountPorGuiar').innerText = porGuiarCount;
+            document.getElementById('legendCountPlaneado').innerText = planeadoCount;
+
+            updateChart(rampaCount, cargandoCount, porGuiarCount, planeadoCount);
+            renderTable();
+            updateMapMarkers();
+        }
+
+        function renderTable() {
+            const tbody = document.getElementById('tableBody');
+            if (!tbody) return;
+            tbody.innerHTML = '';
+
+            document.getElementById('tableRecordCount').innerText = `(${filteredData.length})`;
+            document.getElementById('paginationInfo').innerText = `Mostrando 1 a ${filteredData.length} de ${filteredData.length} unidades`;
+
+            if (filteredData.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="10" class="text-center py-6 text-slate-500">
+                            <i class="fa-solid fa-folder-open text-2xl mb-2"></i>
+                            <p>No se encontraron registros que coincidan con el filtro.</p>
+                        </td>
+                    </tr>`;
+                return;
+            }
+
+            filteredData.forEach((item, idx) => {
+                const tr = document.createElement('tr');
+                tr.className = "hover:bg-slate-800/50 transition border-b border-slate-800/40 text-slate-300";
+
+                let statusBadge = '';
+                const estado = (item.Estado_UT || '').toUpperCase();
+                if (estado === 'RAMPA') {
+                    statusBadge = `<span class="inline-block px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 whitespace-nowrap">RAMPA</span>`;
+                } else if (estado === 'CARGANDO') {
+                    statusBadge = `<span class="inline-block px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30 whitespace-nowrap">CARGANDO</span>`;
+                } else if (estado === 'POR_GUIAR') {
+                    statusBadge = `<span class="inline-block px-2 py-0.5 rounded text-[10px] font-bold bg-purple-500/20 text-purple-400 border border-purple-500/30 whitespace-nowrap">POR_GUIAR</span>`;
+                } else {
+                    statusBadge = `<span class="inline-block px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 whitespace-nowrap">${estado || 'PLANEADO'}</span>`;
+                }
+
+                const formattedDate = item.Llegada_Rampa ? String(item.Llegada_Rampa).replace('T', ' ') : 'N/A';
+
+                let horaSecs = 0;
+                let rawHora = String(item.Hora_Rampa || '00:00:00').trim();
+                let parts = rawHora.split(':');
+                if (parts.length >= 2) {
+                    horaSecs = parseInt(parts[0] || 0) * 3600 + parseInt(parts[1] || 0) * 60 + (parts[2] ? parseInt(parts[2]) : 0);
+                }
+
+                let horaBadgeStyle = '';
+                if (horaSecs > 14400) {
+                    horaBadgeStyle = 'background-color: rgba(159, 18, 57, 0.45); color: #fda4af; border: 1px solid rgba(225, 29, 72, 0.7);';
+                } else if (horaSecs >= 10800 && horaSecs <= 14400) {
+                    horaBadgeStyle = 'background-color: rgba(180, 83, 9, 0.4); color: #fde047; border: 1px solid rgba(217, 119, 6, 0.7);';
+                } else {
+                    horaBadgeStyle = 'background-color: rgba(6, 95, 70, 0.45); color: #6ee7b7; border: 1px solid rgba(5, 150, 105, 0.7);';
+                }
+
+                tr.innerHTML = `
+                    <td class="py-1.5 px-2 font-bold text-blue-400 whitespace-nowrap">${item.Rampa || '-'}</td>
+                    <td class="py-1.5 px-2 whitespace-nowrap">${item.Cod || '-'}</td>
+                    <td class="py-1.5 px-2 font-medium text-white whitespace-nowrap">${item.Destino || '-'}</td>
+                    <td class="py-1.5 px-2 tracking-wider font-mono whitespace-nowrap">${item.PLACA2 || '-'}</td>
+                    <td class="py-1.5 px-2 text-center whitespace-nowrap">${item.Transportista || '-'}</td>
+                    <td class="py-1.5 px-2 text-center whitespace-nowrap">${statusBadge}</td>
+                    <td class="py-1.5 px-2 text-center text-slate-400 whitespace-nowrap">${item.Tipo_UT || '-'}</td>
+                    <td class="py-1.5 px-2 text-center font-mono whitespace-nowrap">
+                        <span class="inline-flex items-center justify-center px-2.5 py-1 rounded-md text-xs font-bold shadow-sm" style="${horaBadgeStyle}">
+                            ${rawHora}
+                        </span>
+                    </td>
+                    <td class="py-1.5 px-2 text-center text-slate-400 font-mono whitespace-nowrap">${formattedDate}</td>
+                    <td class="py-1.5 px-2 text-center whitespace-nowrap">
+                        <div class="flex items-center justify-center space-x-1.5">
+                            <button onclick="editUnit(${idx})" class="p-1 text-slate-400 hover:text-blue-400 transition" title="Editar"><i class="fa-solid fa-pen-to-square"></i></button>
+                            <button onclick="deleteUnit(${idx})" class="p-1 text-slate-400 hover:text-red-400 transition" title="Eliminar"><i class="fa-solid fa-trash-can"></i></button>
+                        </div>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function initChart() {
+            const canvasEl = document.getElementById('statusDonutChart');
+            if (!canvasEl) return;
+            const ctx = canvasEl.getContext('2d');
+            statusChart = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Rampa', 'Cargando', 'Por Guiar', 'Planeado'],
+                    datasets: [{
+                        data: [1, 8, 5, 2],
+                        backgroundColor: ['#34d399', '#fbbf24', '#c084fc', '#818cf8'],
+                        borderWidth: 0,
+                        hoverOffset: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return ` ${context.label}: ${context.raw} Unidades`;
+                                }
+                            }
+                        }
+                    },
+                    cutout: '75%'
+                }
+            });
+        }
+
+        function updateChart(rampa, cargando, porGuiar, planeado) {
+            if (statusChart) {
+                statusChart.data.datasets[0].data = [rampa, cargando, porGuiar, planeado];
+                statusChart.update();
+            }
+        }
+
+        function initMap() {
+            const mapEl = document.getElementById('map');
+            if (!mapEl) return;
+            map = L.map('map', {
+                zoomControl: false,
+                attributionControl: false
+            }).setView([-9.19, -75.0152], 5);
+
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+                maxZoom: 18
+            }).addTo(map);
+
+            updateMapMarkers();
+        }
+
+        function updateMapMarkers() {
+            if (!map) return;
+            mapMarkers.forEach(m => map.removeLayer(m));
+            mapMarkers = [];
+
+            const destCoords = {
+                'PIURA': [-5.1945, -80.6328],
+                'TRUJILLO': [-8.1159, -79.0299],
+                'AREQUIPA': [-16.4090, -71.5375],
+                'CHICLAYO': [-6.7714, -79.8409],
+                'HUANCAYO': [-12.0651, -75.2049],
+                'CHIMBOTE': [-9.0853, -78.5783],
+                'TALARA': [-4.5772, -81.2719],
+                'TACNA': [-18.0146, -70.2536],
+                'ILO': [-17.6394, -71.3375],
+                'CUSCO': [-13.5319, -71.9675],
+                'PUCALLPA': [-8.3791, -74.5539],
+                'LIMA': [-12.0464, -71.0428],
+                'ICA': [-14.0678, -75.7286],
+                'JAEN': [-5.7089, -78.8078],
+                'CHALLAPAMPA': [-16.3885, -71.5350],
+                'AYACUCHO': [-13.1631, -74.2244],
+                'CHACARERO': [-8.1119, -79.0289]
+            };
+
+            let cdCount = 0;
+            let provCount = 0;
+
+            const validUnits = otmData.filter(isValidUnit);
+            
+            // Group units by city location key
+            const cityGroups = {};
+            validUnits.forEach(item => {
+                const destUpper = (item.Destino || '').toUpperCase();
+                let matchedCity = 'LIMA'; // default
+
+                for (let key in destCoords) {
+                    if (destUpper.includes(key)) {
+                        matchedCity = key;
+                        break;
+                    }
+                }
+
+                if (!cityGroups[matchedCity]) {
+                    cityGroups[matchedCity] = {
+                        coords: destCoords[matchedCity],
+                        units: []
+                    };
+                }
+                cityGroups[matchedCity].units.push(item);
+
+                if (destUpper.includes('CD') || destUpper.includes('CENTRO')) {
+                    cdCount++;
+                } else {
+                    provCount++;
+                }
+            });
+
+            // Create compact map markers with reduced circle and text size
+            for (let city in cityGroups) {
+                const group = cityGroups[city];
+                const count = group.units.length;
+
+                const markerHtml = `
+                    <div class="relative flex items-center justify-center">
+                        <div class="w-7 h-7 rounded-full bg-amber-400 text-slate-950 font-black text-xs flex items-center justify-center shadow-md border border-white">
+                            ${count}
+                        </div>
+                    </div>
+                `;
+
+                const customIcon = L.divIcon({
+                    className: 'custom-div-icon',
+                    html: markerHtml,
+                    iconSize: [28, 28],
+                    iconAnchor: [14, 14]
+                });
+
+                const unitsListHtml = group.units.map(u => `• [${u.Rampa}] ${u.Destino} (${u.PLACA2})`).join('<br>');
+                const marker = L.marker(group.coords, { icon: customIcon }).addTo(map);
+                marker.bindPopup(`
+                    <div style="color: #111827; font-size: 11px; max-width: 200px;">
+                        <strong>${city} (${count} Unidades)</strong><br>
+                        <div style="margin-top: 4px; max-height: 100px; overflow-y: auto;">${unitsListHtml}</div>
+                    </div>
+                `);
+                mapMarkers.push(marker);
+            }
+
+            const badgeCD = document.getElementById('badgeCDCount');
+            const badgeProv = document.getElementById('badgeProvCount');
+            if (badgeCD) badgeCD.innerText = `${cdCount} UTs`;
+            if (badgeProv) badgeProv.innerText = `${provCount} UTs`;
+        }
+
+        function applyFilters() {
+            const searchVal = document.getElementById('searchInput').value.toLowerCase();
+            const statusVal = document.getElementById('statusFilter').value;
+            const zoneVal = document.getElementById('zoneFilter').value;
+
+            filteredData = otmData.filter(item => {
+                if (!isValidUnit(item)) return false;
+                
+                const rampa = String(item.Rampa || '').toLowerCase();
+                const destino = String(item.Destino || '').toLowerCase();
+                const placa = String(item.PLACA2 || '').toLowerCase();
+                const trans = String(item.Transportista || '').toLowerCase();
+
+                const matchesSearch = rampa.includes(searchVal) || destino.includes(searchVal) || placa.includes(searchVal) || trans.includes(searchVal);
+                const matchesStatus = !statusVal || (item.Estado_UT || '').toUpperCase() === statusVal;
+
+                let matchesZone = true;
+                const destUp = (item.Destino || '').toUpperCase();
+                if (zoneVal === 'CD') {
+                    matchesZone = destUp.includes('CD');
+                } else if (zoneVal === 'PROVINCIA') {
+                    matchesZone = !destUp.includes('CD');
+                }
+
+                return matchesSearch && matchesStatus && matchesZone;
+            });
+
+            renderTable();
+        }
+
+        function resetFilters() {
+            document.getElementById('searchInput').value = '';
+            document.getElementById('statusFilter').value = '';
+            document.getElementById('zoneFilter').value = '';
+            filteredData = [...otmData.filter(isValidUnit)];
+            renderTable();
+        }
+
+        function sortTable(key) {
+            filteredData.sort((a, b) => {
+                let valA = a[key] || '';
+                let valB = b[key] || '';
+                if (valA < valB) return -1;
+                if (valA > valB) return 1;
+                return 0;
+            });
+            renderTable();
+        }
+
+        function sortHoraRampa() {
+            horaRampaSortAsc = !horaRampaSortAsc;
+            filteredData.sort((a, b) => {
+                const getSecs = (str) => {
+                    if (!str) return 0;
+                    if (typeof str === 'number') return Math.round(str * 86400);
+                    let cleaned = String(str).trim();
+                    const timeMatch = cleaned.match(/(\d{2}):(\d{2}):(\d{2})/);
+                    if (timeMatch) {
+                        return parseInt(timeMatch[1]) * 3600 + parseInt(timeMatch[2]) * 60 + parseInt(timeMatch[3]);
+                    }
+                    const parts = cleaned.split(':');
+                    if (parts.length >= 2) {
+                        return parseInt(parts[0] || 0) * 3600 + parseInt(parts[1] || 0) * 60 + parseInt(parts[2] || 0);
+                    }
+                    return 0;
+                };
+                const secsA = getSecs(a.Hora_Rampa);
+                const secsB = getSecs(b.Hora_Rampa);
+
+                return horaRampaSortAsc ? secsA - secsB : secsB - secsA;
+            });
+            renderTable();
+        }
+
+        function openAddModal() {
+            document.getElementById('formIndex').value = '-1';
+            document.getElementById('modalTitle').innerHTML = '<i class="fa-solid fa-truck-front text-blue-400"></i> Registrar Nueva Unidad';
+            document.getElementById('unitForm').reset();
+            document.getElementById('unitModal').classList.remove('hidden');
+        }
+
+        function editUnit(index) {
+            const item = filteredData[index];
+            const realIdx = otmData.findIndex(i => i === item);
+            document.getElementById('formIndex').value = realIdx;
+            document.getElementById('modalTitle').innerHTML = '<i class="fa-solid fa-pen-to-square text-blue-400"></i> Editar Unidad OTM';
+            
+            document.getElementById('formRampa').value = item.Rampa || '';
+            document.getElementById('formCod').value = item.Cod || '';
+            document.getElementById('formDestino').value = item.Destino || '';
+            document.getElementById('formPlaca').value = item.PLACA2 || '';
+            document.getElementById('formTransportista').value = item.Transportista || '';
+            document.getElementById('formEstado').value = item.Estado_UT || 'RAMPA';
+            document.getElementById('formTipo').value = item.Tipo_UT || 'PALETERO_46-52P';
+            document.getElementById('formHoraRampa').value = item.Hora_Rampa || '00:00:00';
+            document.getElementById('formLlegada').value = item.Llegada_Rampa || '';
+
+            document.getElementById('unitModal').classList.remove('hidden');
+        }
+
+        function closeUnitModal() {
+            document.getElementById('unitModal').classList.add('hidden');
+        }
+
+        function saveUnit(e) {
+            e.preventDefault();
+            const idx = parseInt(document.getElementById('formIndex').value);
+            const newItem = {
+                Rampa: document.getElementById('formRampa').value,
+                Cod: parseInt(document.getElementById('formCod').value) || 0,
+                Destino: document.getElementById('formDestino').value.toUpperCase(),
+                PLACA2: document.getElementById('formPlaca').value.toUpperCase(),
+                Transportista: document.getElementById('formTransportista').value.toUpperCase(),
+                Estado_UT: document.getElementById('formEstado').value,
+                Tipo_UT: document.getElementById('formTipo').value,
+                Hora_Rampa: document.getElementById('formHoraRampa').value,
+                Llegada_Rampa: document.getElementById('formLlegada').value
+            };
+
+            if (idx >= 0) {
+                otmData[idx] = newItem;
+            } else {
+                otmData.push(newItem);
+            }
+
+            filteredData = [...otmData.filter(isValidUnit)];
+            renderDashboard();
+            closeUnitModal();
+        }
+
+        function deleteUnit(index) {
+            const item = filteredData[index];
+            const realIdx = otmData.findIndex(i => i === item);
+            if (realIdx >= 0) {
+                otmData.splice(realIdx, 1);
+                filteredData = [...otmData.filter(isValidUnit)];
+                renderDashboard();
+            }
+        }
+
+        function handleExcelUpload(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(evt) {
+                try {
+                    const data = new Uint8Array(evt.target.result);
+                    const workbook = XLSX.read(data, { type: 'array', cellDates: true });
+                    
+                    let sheetName = null;
+                    const sheetNames = workbook.SheetNames;
+                    
+                    // Look for 'TABLA' specifically (case-insensitive), ignoring PEGAR and STATUS
+                    for (let s of sheetNames) {
+                        const sUp = String(s).trim().toUpperCase();
+                        if (sUp === 'TABLA' || sUp.includes('TABLA')) {
+                            sheetName = s;
+                            break;
+                        }
+                    }
+
+                    // If exact TABLA isn't found, find any sheet that is not PEGAR or STATUS
+                    if (!sheetName) {
+                        for (let s of sheetNames) {
+                            const sUp = String(s).trim().toUpperCase();
+                            if (sUp !== 'PEGAR' && sUp !== 'STATUS' && !sUp.includes('PEGAR') && !sUp.includes('STATUS')) {
+                                sheetName = s;
+                                break;
+                            }
+                        }
+                    }
+
+                    if (!sheetName) {
+                        sheetName = sheetNames[0]; // Fallback to first sheet
+                    }
+
+                    const worksheet = workbook.Sheets[sheetName];
+                    const json = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+
+                    if (json.length < 2) {
+                        console.warn('El archivo Excel no contiene suficientes registros.');
+                        return;
+                    }
+
+                    let headerRowIdx = 0;
+                    for (let i = 0; i < Math.min(json.length, 5); i++) {
+                        const row = json[i];
+                        if (row && row.some(cell => String(cell).toUpperCase().includes('RAMPA') || String(cell).toUpperCase().includes('DESTINO'))) {
+                            headerRowIdx = i;
+                            break;
+                        }
+                    }
+
+                    const headers = json[headerRowIdx].map(h => String(h || '').trim().toUpperCase());
+                    const getIdx = (keywords) => headers.findIndex(h => keywords.some(k => h.includes(k)));
+                    
+                    const rampaIdx = getIdx(['RAMPA']);
+                    const codIdx = getIdx(['COD', 'CÓDIGO']);
+                    const destinoIdx = getIdx(['DESTINO']);
+                    const placaIdx = getIdx(['PLACA', 'PLACA2']);
+                    const transIdx = getIdx(['TRANSPORTISTA']);
+                    const estadoIdx = getIdx(['ESTADO']);
+                    const tipoIdx = getIdx(['TIPO']);
+                    
+                    // Column H (index 7) for Hora Rampa and Column I (index 8) for Llegada a Rampa as requested
+                    const horaIdx = 7;
+                    const llegadaIdx = 8;
+
+                    let newParsedData = [];
+                    for (let i = headerRowIdx + 1; i < json.length; i++) {
+                        const row = json[i];
+                        if (!row || row.length === 0) continue;
+
+                        const rampaVal = rampaIdx >= 0 ? String(row[rampaIdx] || '').trim() : String(row[0] || '').trim();
+                        const destinoVal = destinoIdx >= 0 ? String(row[destinoIdx] || '').trim() : String(row[2] || '').trim();
+                        const placaVal = placaIdx >= 0 ? String(row[placaIdx] || '').trim() : String(row[3] || '').trim();
+                        const transVal = transIdx >= 0 ? String(row[transIdx] || '').trim() : String(row[4] || '').trim();
+                        const estadoVal = estadoIdx >= 0 ? String(row[estadoIdx] || '').trim() : String(row[5] || '').trim();
+                        const tipoVal = tipoIdx >= 0 ? String(row[tipoIdx] || '').trim() : String(row[6] || '').trim();
+
+                        const rUpper = rampaVal.toUpperCase();
+                        const dUpper = destinoVal.toUpperCase();
+                        if (rUpper.includes('TOTAL') || rUpper.includes('GENERAL') || dUpper.includes('TOTAL')) {
+                            continue;
+                        }
+
+                        if (!rampaVal && !destinoVal && !placaVal) continue;
+
+                        let horaStr = '00:00:00';
+                        if (row[horaIdx] !== undefined) {
+                            let rawH = row[horaIdx];
+                            if (typeof rawH === 'number') {
+                                const totalSecs = Math.round(rawH * 86400);
+                                const hrs = Math.floor(totalSecs / 3600);
+                                const mins = Math.floor((totalSecs % 3600) / 60);
+                                const secs = totalSecs % 60;
+                                horaStr = `${String(hrs).padStart(2,'0')}:${String(mins).padStart(2,'0')}:${String(secs).padStart(2,'0')}`;
+                            } else if (rawH instanceof Date) {
+                                horaStr = rawH.toTimeString().split(' ')[0];
+                            } else {
+                                horaStr = String(rawH).trim();
+                            }
+                        }
+
+                        let llegadaStr = '';
+                        if (row[llegadaIdx] !== undefined) {
+                            llegadaStr = row[llegadaIdx];
+                        }
+
+                        if (llegadaStr instanceof Date) {
+                            llegadaStr = llegadaStr.toISOString().slice(0, 10) + ' ' + llegadaStr.toTimeString().slice(0, 5);
+                        } else {
+                            llegadaStr = String(llegadaStr || '2026-08-12 10:00').trim();
+                        }
+
+                        newParsedData.push({
+                            Rampa: rampaVal || '-',
+                            Cod: codIdx >= 0 ? (parseInt(row[codIdx]) || 999) : 999,
+                            Destino: destinoVal.toUpperCase() || 'DESTINO NACIONAL',
+                            PLACA2: placaVal.toUpperCase() || 'ABC-123',
+                            Transportista: transVal.toUpperCase() || 'ISL',
+                            Estado_UT: estadoVal.toUpperCase() || 'CARGANDO',
+                            Tipo_UT: tipoVal.toUpperCase() || 'PALETERO_46-52P',
+                            Hora_Rampa: horaStr,
+                            Llegada_Rampa: llegadaStr
+                        });
+                    }
+
+                    if (newParsedData.length > 0) {
+                        otmData = newParsedData;
+                        filteredData = [...otmData.filter(isValidUnit)];
+                        renderDashboard();
+                    }
+                } catch (err) {
+                    console.error('Error al procesar el archivo Excel:', err);
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        function downloadTemplate() {
+            const wsData = [
+                ["Rampa", "Cod", "Destino", "PLACA", "Transportista", "Estado UT", "Tipo de UT", "Hora en rampa", "Llegada a rampa"],
+                ["111", 961, "CD MASS PIURA", "TJO-993", "TVN", "RAMPA", "PALETERO_46-52P", "02:21:38", "2026-08-12 11:25"],
+                ["113", 961, "CD MASS PIURA", "TJH-983", "TVN", "CARGANDO", "PALETERO_46-52P", "02:30:38", "2026-08-12 11:16"]
+            ];
+            const ws = XLSX.utils.aoa_to_sheet(wsData);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "TABLA");
+            XLSX.writeFile(wb, "Plantilla_Status_OTM.xlsx");
+        }
+
+        function exportToExcel() {
+            const validUnits = otmData.filter(isValidUnit);
+            const wsData = [
+                ["Rampa", "Cod", "Destino", "PLACA", "Transportista", "Estado UT", "Tipo de UT", "Hora en rampa", "Llegada a rampa"],
+                ...validUnits.map(i => [i.Rampa, i.Cod, i.Destino, i.PLACA2, i.Transportista, i.Estado_UT, i.Tipo_UT, i.Hora_Rampa, i.Llegada_Rampa])
+            ];
+            const ws = XLSX.utils.aoa_to_sheet(wsData);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "TABLA");
+            XLSX.writeFile(wb, "Reporte_Actualizado_OTM.xlsx");
+        }
+
+        function exportToHDImage() {
+            const container = document.getElementById('dashboard-container');
+            
+            // Invalidate map size before capturing to ensure tiles render properly
+            if (map) {
+                map.invalidateSize();
+            }
+
+            // Ensure Leaflet tile pane and markers are fully visible for html2canvas
+            setTimeout(() => {
+                html2canvas(container, { 
+                    scale: 2, 
+                    backgroundColor: '#0b0f19',
+                    useCORS: true,
+                    allowTaint: true
+                }).then(canvas => {
+                    const link = document.createElement('a');
+                    link.download = 'Dashboard_OTM_HD.png';
+                    link.href = canvas.toDataURL('image/png');
+                    link.click();
+                });
+            }, 300);
+        }
+
+        window.onload = function() {
+            updateRealTimeClock();
+            setInterval(updateRealTimeClock, 1000);
+            setInterval(incrementHoraRampaValues, 1000); // Increment rampa time every second
+            initChart();
+            initMap();
+            renderDashboard();
+        };
+    </script>
+</body>
+</html>
